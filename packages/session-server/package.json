@@ -1,0 +1,31 @@
+{
+  "name": "@codesession/session-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@codesession/shared": "*",
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "ws": "^8.18.0",
+    "nanoid": "^5.0.7",
+    "yjs": "^13.6.18",
+    "lib0": "^0.2.94",
+    "y-protocols": "^1.0.6"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/ws": "^8.5.12",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}
