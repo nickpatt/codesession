@@ -1,0 +1,19 @@
+{
+  "name": "codesession",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Real-time collaborative coding platform with live code execution.",
+  "workspaces": [
+    "packages/shared",
+    "packages/session-server",
+    "packages/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @codesession/session-server & npm run dev --workspace @codesession/web",
+    "dev:server": "npm run dev --workspace @codesession/session-server",
+    "dev:web": "npm run dev --workspace @codesession/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "license": "MIT"
+}
