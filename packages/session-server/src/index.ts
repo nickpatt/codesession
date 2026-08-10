@@ -3,6 +3,8 @@ import express from "express";
 import cors from "cors";
 import { WebSocketServer } from "ws";
 import { config } from "./config.js";
+import { SessionStore } from "./sessions.js";
+import { createRoutes } from "./routes.js";
 
 /**
  * Entry point for the CodeSession session-server.
@@ -22,10 +24,16 @@ const app = express();
 app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json());
 
+/** Central registry of live sessions. */
+const store = new SessionStore();
+
 /** Liveness probe used by load balancers and the local dev setup. */
 app.get("/health", (_req, res) => {
   res.json({ ok: true, uptime: process.uptime() });
 });
+
+// REST API for creating / inspecting sessions.
+app.use("/api", createRoutes(store));
 
 const server = http.createServer(app);
 
