@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import { config } from "./config.js";
 import { SessionStore } from "./sessions.js";
 import { createRoutes } from "./routes.js";
+import { DocManager } from "./collab.js";
 
 /**
  * Entry point for the CodeSession session-server.
@@ -27,6 +28,9 @@ app.use(express.json());
 /** Central registry of live sessions. */
 const store = new SessionStore();
 
+/** Owns the Yjs document for each session. */
+const docs = new DocManager();
+
 /** Liveness probe used by load balancers and the local dev setup. */
 app.get("/health", (_req, res) => {
   res.json({ ok: true, uptime: process.uptime() });
@@ -41,15 +45,33 @@ const server = http.createServer(app);
 // so we can route by URL (/ws/:sessionId) before accepting the socket.
 const wss = new WebSocketServer({ noServer: true });
 
+// Clients connect to  ws://host/ws/<sessionId>. We validate the session exists
+// before accepting the socket, then hand it to that session's shared document.
 server.on("upgrade", (req, socket, head) => {
-  // Phase 1a: accept the upgrade and echo. Real Yjs relay is wired in later.
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    wss.emit("connection", ws, req);
-  });
-});
+  const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
+  const match = url.pathname.match(/^\/ws\/([^/]+)$/);
+  if (!match) {
+    socket.destroy();
+    return;
+  }
+  const sessionId = match[1];
+  if (!store.has(sessionId)) {
+    // Reject unknown sessions so stale/expired links fail fast.
+    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+    socket.destroy();
+    return;
+  }
 
-wss.on("connection", (ws) => {
-  ws.on("message", (data) => ws.send(data)); // temporary echo
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    const doc = docs.getOrCreate(sessionId);
+    doc.onChange = () => store.touch(sessionId);
+    store.addConnection(sessionId);
+    doc.addConnection(ws);
+
+    ws.on("close", () => {
+      store.removeConnection(sessionId, config.sessionTtlMs);
+    });
+  });
 });
 
 server.listen(config.port, () => {
