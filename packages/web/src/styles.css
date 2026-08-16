@@ -1,0 +1,125 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #2563eb;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: white;
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+}
+button.secondary { background: var(--panel); color: var(--text); }
+button:disabled { opacity: 0.5; cursor: default; }
+
+/* ---- Home ---- */
+.home {
+  max-width: 640px;
+  margin: 12vh auto;
+  padding: 0 1.5rem;
+  text-align: center;
+}
+.home h1 { font-size: 2.5rem; margin-bottom: 0.25rem; }
+.home p { color: var(--muted); font-size: 1.1rem; }
+
+/* ---- Session ---- */
+.session { display: flex; flex-direction: column; height: 100vh; }
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.topbar .brand { font-weight: 700; }
+.topbar .spacer { flex: 1; }
+.topbar .share input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  width: 320px;
+}
+.status { font-size: 0.85rem; color: var(--muted); }
+.status.connected { color: #16a34a; }
+.status.connecting { color: #d97706; }
+.status.disconnected { color: #e11d48; }
+
+/* Presence pills */
+.presence { display: flex; gap: 0.4rem; align-items: center; }
+.presence .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+}
+.presence .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.editor-wrap { flex: 1; min-height: 0; }
+.cm-editor { height: 100%; }
+
+/* Remote cursor carets (rendered by y-codemirror.next) */
+.cm-ySelectionCaret {
+  position: relative;
+  border-left: 2px solid;
+  margin-left: -1px;
+  box-sizing: border-box;
+}
+.cm-ySelectionInfo {
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  font-size: 0.7rem;
+  color: white;
+  padding: 0 4px;
+  border-radius: 4px 4px 4px 0;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ---- Join dialog ---- */
+.dialog-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: grid; place-items: center;
+}
+.dialog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: min(90vw, 380px);
+}
+.dialog h2 { margin-top: 0; }
+.dialog input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.6rem;
+  border-radius: 8px;
+  margin: 0.75rem 0 1rem;
+}
