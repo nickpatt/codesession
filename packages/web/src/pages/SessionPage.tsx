@@ -1,22 +1,31 @@
 import { useParams } from "react-router-dom";
 import { useCollab } from "../collab/useCollab.js";
 import { Editor } from "../collab/Editor.js";
+import { JoinDialog } from "../components/JoinDialog.js";
+import { ShareLink } from "../components/ShareLink.js";
+import { useDisplayName } from "../hooks/useDisplayName.js";
 
 /**
- * The collaborative editor page. Connects to the session's Yjs document and
- * renders a CodeMirror editor bound to it.
+ * The collaborative editor page.
  *
- * (A display-name prompt and presence list are layered on next; for now we use
- * a placeholder name so the editor + sync can be verified end to end.)
+ * Flow: if we don't yet know the user's display name, show the join dialog.
+ * Once we have a name, connect to the session's Yjs document and render the
+ * editor bound to it, with the shareable link in the top bar.
  */
 export function SessionPage() {
   const { id } = useParams();
-  const collab = useCollab(id ?? "", "Anonymous");
+  const [name, setName] = useDisplayName();
+
+  // Don't connect until we have a name, so the user's cursor is labeled.
+  const collab = useCollab(name ? (id ?? "") : "", name ?? "");
+
+  if (!name) return <JoinDialog onJoin={setName} />;
 
   return (
     <div className="session">
       <div className="topbar">
         <span className="brand">CodeSession</span>
+        <ShareLink />
         <span className="spacer" />
         <span className="status">session {id}</span>
       </div>
