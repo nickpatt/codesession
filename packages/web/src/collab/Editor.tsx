@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { yCollab } from "y-codemirror.next";
+import { remoteCursorsTheme } from "./remoteCursors.js";
 import type { Collab } from "./useCollab.js";
 
 /**
@@ -38,6 +39,7 @@ export function Editor({ collab }: { collab: Collab }) {
         // The collaboration extension. Awareness carries our user field
         // ({ name, color }) which it uses to color and label remote carets.
         yCollab(text, provider.awareness),
+        remoteCursorsTheme,
         EditorView.theme({ "&": { fontSize: "14px" } }),
       ],
     });
