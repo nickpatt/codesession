@@ -3,6 +3,8 @@ import { useCollab } from "../collab/useCollab.js";
 import { Editor } from "../collab/Editor.js";
 import { JoinDialog } from "../components/JoinDialog.js";
 import { ShareLink } from "../components/ShareLink.js";
+import { PresenceList } from "../components/PresenceList.js";
+import { usePresence } from "../collab/usePresence.js";
 import { useDisplayName } from "../hooks/useDisplayName.js";
 
 /**
@@ -18,6 +20,7 @@ export function SessionPage() {
 
   // Don't connect until we have a name, so the user's cursor is labeled.
   const collab = useCollab(name ? (id ?? "") : "", name ?? "");
+  const participants = usePresence(collab?.provider ?? null);
 
   if (!name) return <JoinDialog onJoin={setName} />;
 
@@ -27,7 +30,7 @@ export function SessionPage() {
         <span className="brand">CodeSession</span>
         <ShareLink />
         <span className="spacer" />
-        <span className="status">session {id}</span>
+        <PresenceList participants={participants} />
       </div>
       {collab ? <Editor collab={collab} /> : <div className="editor-wrap" />}
     </div>
