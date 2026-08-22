@@ -4,6 +4,7 @@ import { Editor } from "../collab/Editor.js";
 import { JoinDialog } from "../components/JoinDialog.js";
 import { ShareLink } from "../components/ShareLink.js";
 import { PresenceList } from "../components/PresenceList.js";
+import { ConnectionStatus } from "../components/ConnectionStatus.js";
 import { usePresence } from "../collab/usePresence.js";
 import { useDisplayName } from "../hooks/useDisplayName.js";
 
@@ -30,6 +31,7 @@ export function SessionPage() {
         <span className="brand">CodeSession</span>
         <ShareLink />
         <span className="spacer" />
+        {collab && <ConnectionStatus status={collab.status} />}
         <PresenceList participants={participants} />
       </div>
       {collab ? <Editor collab={collab} /> : <div className="editor-wrap" />}

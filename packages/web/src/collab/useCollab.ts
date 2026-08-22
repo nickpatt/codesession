@@ -49,12 +49,20 @@ export function useCollab(sessionId: string, name: string): Collab | null {
     });
     providerRef.current = provider;
 
+    const userField = { name, color: colorForClient(doc.clientID) };
+
     // Advertise who we are so others can label our cursor. Color is derived
     // from our awareness clientID so it stays stable for this connection.
-    provider.awareness.setLocalStateField("user", {
-      name,
-      color: colorForClient(doc.clientID),
-    });
+    provider.awareness.setLocalStateField("user", userField);
+
+    // On (re)connect, re-assert our presence. y-websocket wipes remote
+    // awareness when the socket drops; re-setting our user field on the "sync"
+    // event guarantees our cursor reappears for everyone after a reconnect,
+    // and that buffered document edits made while offline are flushed.
+    const onSync = (isSynced: boolean) => {
+      if (isSynced) provider.awareness.setLocalStateField("user", userField);
+    };
+    provider.on("sync", onSync);
 
     const collabValue: Collab = {
       doc,
@@ -75,6 +83,7 @@ export function useCollab(sessionId: string, name: string): Collab | null {
 
     return () => {
       provider.off("status", onStatus);
+      provider.off("sync", onSync);
       provider.awareness.setLocalState(null);
       provider.destroy();
       doc.destroy();
