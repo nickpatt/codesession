@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { SessionStore } from "./sessions.js";
 import { createRoutes } from "./routes.js";
 import { DocManager } from "./collab.js";
+import { Persistence } from "./persistence.js";
 
 /**
  * Entry point for the CodeSession session-server.
@@ -30,6 +31,9 @@ const store = new SessionStore();
 
 /** Owns the Yjs document for each session. */
 const docs = new DocManager();
+
+/** Disk-backed persistence so restarts don't wipe active sessions. */
+const persistence = new Persistence(config.dataDir, store, docs);
 
 /** Liveness probe used by load balancers and the local dev setup. */
 app.get("/health", (_req, res) => {
@@ -74,6 +78,39 @@ server.on("upgrade", (req, socket, head) => {
   });
 });
 
-server.listen(config.port, () => {
-  console.log(`[session-server] listening on :${config.port}`);
+/**
+ * Periodically snapshot sessions to disk so an unexpected restart loses at most
+ * a few seconds of edits.
+ */
+function startPersistenceLoop(): NodeJS.Timeout {
+  return setInterval(() => {
+    persistence.flush().catch((err) => console.error("[persistence] flush:", err));
+  }, config.persistIntervalMs);
+}
+
+// Boot: load persisted sessions, then start the server and background loops.
+async function main() {
+  await persistence.init();
+  const loaded = await persistence.loadAll();
+  if (loaded > 0) console.log(`[persistence] restored ${loaded} session(s)`);
+
+  const persistTimer = startPersistenceLoop();
+
+  server.listen(config.port, () => {
+    console.log(`[session-server] listening on :${config.port}`);
+  });
+
+  // On shutdown, flush one last time so nothing in flight is lost.
+  const shutdown = async () => {
+    clearInterval(persistTimer);
+    await persistence.flush().catch(() => {});
+    server.close(() => process.exit(0));
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+main().catch((err) => {
+  console.error("[session-server] fatal:", err);
+  process.exit(1);
 });
