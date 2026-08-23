@@ -88,6 +88,22 @@ function startPersistenceLoop(): NodeJS.Timeout {
   }, config.persistIntervalMs);
 }
 
+/**
+ * Periodically reap sessions whose 24h TTL has elapsed with nobody connected.
+ * Reaping tears down the in-memory document and deletes its file on disk, which
+ * is what keeps a public deployment from accumulating abandoned sessions.
+ */
+function startSweepLoop(): NodeJS.Timeout {
+  return setInterval(() => {
+    const reaped = store.sweepExpired();
+    for (const id of reaped) {
+      docs.remove(id);
+      persistence.remove(id).catch(() => {});
+      console.log(`[sweep] expired session ${id}`);
+    }
+  }, config.sweepIntervalMs);
+}
+
 // Boot: load persisted sessions, then start the server and background loops.
 async function main() {
   await persistence.init();
@@ -95,6 +111,7 @@ async function main() {
   if (loaded > 0) console.log(`[persistence] restored ${loaded} session(s)`);
 
   const persistTimer = startPersistenceLoop();
+  const sweepTimer = startSweepLoop();
 
   server.listen(config.port, () => {
     console.log(`[session-server] listening on :${config.port}`);
@@ -103,6 +120,7 @@ async function main() {
   // On shutdown, flush one last time so nothing in flight is lost.
   const shutdown = async () => {
     clearInterval(persistTimer);
+    clearInterval(sweepTimer);
     await persistence.flush().catch(() => {});
     server.close(() => process.exit(0));
   };
