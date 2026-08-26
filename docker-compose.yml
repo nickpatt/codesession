@@ -1,0 +1,32 @@
+# Local development orchestration.
+#
+# Phase 1 needs only the session-server; the web app is run with Vite's dev
+# server (npm run dev:web) for hot reload. The execution-service is included so
+# Phase 2 work can spin the whole stack up with one command.
+services:
+  session-server:
+    build:
+      context: .
+      dockerfile: packages/session-server/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATA_DIR: "/data"
+      SESSION_TTL_MS: "86400000" # 24h
+    volumes:
+      - session-data:/data
+    restart: unless-stopped
+
+  # Phase 2 — sandboxed runner. Needs the Docker socket to launch per-run
+  # containers. Commented out until the sandbox is implemented.
+  # execution-service:
+  #   build:
+  #     context: packages/execution-service
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  session-data:
