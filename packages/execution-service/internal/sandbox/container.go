@@ -68,7 +68,11 @@ func hostConfig(l Limits) *container.HostConfig {
 				Target: "/scratch",
 				TmpfsOptions: &mount.TmpfsOptions{
 					SizeBytes: l.ScratchBytes,
-					Mode:      0o770,
+					// 1777 = world-writable with the sticky bit (like /tmp), so
+					// the non-root runner user can write its files here. The
+					// container is single-tenant and disposable, so a shared
+					// scratch dir poses no cross-user risk.
+					Mode: 0o1777,
 				},
 			},
 		},
