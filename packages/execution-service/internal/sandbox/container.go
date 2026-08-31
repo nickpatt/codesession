@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
 
@@ -131,4 +132,23 @@ func (d *Docker) Remove(ctx context.Context, id string) error {
 		Force:         true,
 		RemoveVolumes: true,
 	})
+}
+
+// CleanupOrphans force-removes any sandbox containers left over from a previous
+// run of the service (e.g. after an unclean shutdown). Called at startup so the
+// pool never has to compete with zombie containers. Returns how many it removed.
+func (d *Docker) CleanupOrphans(ctx context.Context) (int, error) {
+	f := filters.NewArgs()
+	f.Add("label", "app=codesession-sandbox")
+	list, err := d.cli.ContainerList(ctx, container.ListOptions{All: true, Filters: f})
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, c := range list {
+		if err := d.Remove(ctx, c.ID); err == nil {
+			n++
+		}
+	}
+	return n, nil
 }
