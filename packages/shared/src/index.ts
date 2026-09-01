@@ -36,6 +36,26 @@ export interface CreateSessionResponse {
   session: SessionInfo;
 }
 
+/**
+ * Control messages sent from a client to the server over the WebSocket as JSON
+ * text frames (binary frames are reserved for Yjs sync/awareness). Phase 2 adds
+ * run + stop.
+ */
+export type ClientControl =
+  | { type: "run" }
+  | { type: "stop" };
+
+/**
+ * Messages the server broadcasts to every client in a session as JSON text
+ * frames, carrying shared run state and streamed program output. Because these
+ * are fanned out to everyone, all participants see the same output at once.
+ */
+export type ServerControl =
+  | { type: "run-started"; by?: string }
+  | { type: "run-output"; stream: "stdout" | "stderr"; data: string }
+  | { type: "run-exit"; exitCode: number; reason?: string }
+  | { type: "run-error"; message: string };
+
 /** Distinct, high-contrast colors assigned round-robin to participants. */
 export const USER_COLORS = [
   "#e11d48",

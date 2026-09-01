@@ -21,4 +21,7 @@ export const config = {
 
   /** Grace period (ms) a session survives after the last participant leaves. */
   sessionTtlMs: Number(process.env.SESSION_TTL_MS ?? 24 * 60 * 60 * 1000),
+
+  /** Base URL of the execution-service that runs code (Phase 2). */
+  execUrl: process.env.EXEC_URL ?? "http://localhost:9090",
 } as const;

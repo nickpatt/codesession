@@ -7,6 +7,8 @@ import { SessionStore } from "./sessions.js";
 import { createRoutes } from "./routes.js";
 import { DocManager } from "./collab.js";
 import { Persistence } from "./persistence.js";
+import { ExecutionBridge } from "./execution.js";
+import type { ClientControl } from "@codesession/shared";
 
 /**
  * Entry point for the CodeSession session-server.
@@ -34,6 +36,9 @@ const docs = new DocManager();
 
 /** Disk-backed persistence so restarts don't wipe active sessions. */
 const persistence = new Persistence(config.dataDir, store, docs);
+
+/** Bridges Run/Stop to the execution-service and fans output to all clients. */
+const execution = new ExecutionBridge(docs);
 
 /** Liveness probe used by load balancers and the local dev setup. */
 app.get("/health", (_req, res) => {
@@ -71,6 +76,30 @@ server.on("upgrade", (req, socket, head) => {
     doc.onChange = () => store.touch(sessionId);
     store.addConnection(sessionId);
     doc.addConnection(ws);
+
+    // Handle text-frame control messages (run/stop). Binary frames are Yjs
+    // traffic and are handled inside the SharedDoc.
+    ws.on("message", (data: ArrayBuffer, isBinary: boolean) => {
+      if (isBinary) return;
+      // A text frame may arrive as an ArrayBuffer (binaryType is set for Yjs)
+      // or a Buffer; normalize to a string before parsing.
+      const text =
+        data instanceof ArrayBuffer
+          ? Buffer.from(data).toString("utf8")
+          : String(data);
+      let msg: ClientControl;
+      try {
+        msg = JSON.parse(text);
+      } catch {
+        return;
+      }
+      const broadcast = (m: unknown) => doc.broadcastControl(m);
+      if (msg.type === "run") {
+        void execution.run(sessionId, broadcast);
+      } else if (msg.type === "stop") {
+        void execution.stop(sessionId);
+      }
+    });
 
     ws.on("close", () => {
       store.removeConnection(sessionId, config.sessionTtlMs);
