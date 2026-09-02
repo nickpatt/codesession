@@ -78,8 +78,38 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .presence .dot { width: 10px; height: 10px; border-radius: 50%; }
 
-.editor-wrap { flex: 1; min-height: 0; }
+/* Editor + output split the remaining height. */
+.workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.editor-wrap { flex: 3; min-height: 0; }
 .cm-editor { height: 100%; }
+
+/* Run / Stop buttons */
+button.run { background: #16a34a; }
+button.stop { background: #e11d48; }
+
+/* Shared output panel */
+.output {
+  flex: 2;
+  min-height: 120px;
+  border-top: 1px solid var(--border);
+  background: #0a0e14;
+  display: flex;
+  flex-direction: column;
+}
+.output-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0.6rem 0.9rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.output-empty { color: var(--muted); font-style: italic; }
+.out-stdout { color: #d1d5db; }
+.out-stderr { color: #f87171; }
+.out-system { color: #60a5fa; font-weight: 600; }
 
 /* Remote cursor carets (rendered by y-codemirror.next) */
 .cm-ySelectionCaret {
