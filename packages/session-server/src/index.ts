@@ -8,6 +8,7 @@ import { createRoutes } from "./routes.js";
 import { DocManager } from "./collab.js";
 import { Persistence } from "./persistence.js";
 import { ExecutionBridge } from "./execution.js";
+import { ControlHub } from "./control.js";
 import type { ClientControl } from "@codesession/shared";
 
 /**
@@ -37,6 +38,9 @@ const docs = new DocManager();
 /** Disk-backed persistence so restarts don't wipe active sessions. */
 const persistence = new Persistence(config.dataDir, store, docs);
 
+/** Tracks control (run/stop/output) sockets per session. */
+const control = new ControlHub();
+
 /** Bridges Run/Stop to the execution-service and fans output to all clients. */
 const execution = new ExecutionBridge(docs);
 
@@ -50,20 +54,25 @@ app.use("/api", createRoutes(store));
 
 const server = http.createServer(app);
 
-// A WebSocket server in "noServer" mode: we handle the HTTP upgrade ourselves
-// so we can route by URL (/ws/:sessionId) before accepting the socket.
+// Two WebSocket servers in "noServer" mode so we can route by URL before
+// accepting:  /ws/<id>      -> Yjs sync/awareness (binary protocol)
+//             /control/<id> -> run/stop + streamed output (JSON text)
+// They are kept separate because the Yjs client library binary-decodes every
+// frame it receives, so control messages cannot share that socket.
 const wss = new WebSocketServer({ noServer: true });
+const controlWss = new WebSocketServer({ noServer: true });
 
-// Clients connect to  ws://host/ws/<sessionId>. We validate the session exists
-// before accepting the socket, then hand it to that session's shared document.
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
-  const match = url.pathname.match(/^\/ws\/([^/]+)$/);
-  if (!match) {
+
+  const sync = url.pathname.match(/^\/ws\/([^/]+)$/);
+  const ctrl = url.pathname.match(/^\/control\/([^/]+)$/);
+  const sessionId = sync?.[1] ?? ctrl?.[1];
+
+  if (!sessionId) {
     socket.destroy();
     return;
   }
-  const sessionId = match[1];
   if (!store.has(sessionId)) {
     // Reject unknown sessions so stale/expired links fail fast.
     socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
@@ -71,29 +80,31 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
 
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    const doc = docs.getOrCreate(sessionId);
-    doc.onChange = () => store.touch(sessionId);
-    store.addConnection(sessionId);
-    doc.addConnection(ws);
+  if (sync) {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      const doc = docs.getOrCreate(sessionId);
+      doc.onChange = () => store.touch(sessionId);
+      store.addConnection(sessionId);
+      doc.addConnection(ws);
+      ws.on("close", () => {
+        store.removeConnection(sessionId, config.sessionTtlMs);
+      });
+    });
+    return;
+  }
 
-    // Handle text-frame control messages (run/stop). Binary frames are Yjs
-    // traffic and are handled inside the SharedDoc.
-    ws.on("message", (data: ArrayBuffer, isBinary: boolean) => {
-      if (isBinary) return;
-      // A text frame may arrive as an ArrayBuffer (binaryType is set for Yjs)
-      // or a Buffer; normalize to a string before parsing.
-      const text =
-        data instanceof ArrayBuffer
-          ? Buffer.from(data).toString("utf8")
-          : String(data);
+  // Control channel.
+  controlWss.handleUpgrade(req, socket, head, (ws) => {
+    control.add(sessionId, ws);
+    const broadcast = (m: unknown) => control.broadcast(sessionId, m);
+
+    ws.on("message", (data: Buffer) => {
       let msg: ClientControl;
       try {
-        msg = JSON.parse(text);
+        msg = JSON.parse(data.toString("utf8"));
       } catch {
         return;
       }
-      const broadcast = (m: unknown) => doc.broadcastControl(m);
       if (msg.type === "run") {
         void execution.run(sessionId, broadcast);
       } else if (msg.type === "stop") {
@@ -101,9 +112,8 @@ server.on("upgrade", (req, socket, head) => {
       }
     });
 
-    ws.on("close", () => {
-      store.removeConnection(sessionId, config.sessionTtlMs);
-    });
+    ws.on("close", () => control.remove(sessionId, ws));
+    ws.on("error", () => control.remove(sessionId, ws));
   });
 });
 

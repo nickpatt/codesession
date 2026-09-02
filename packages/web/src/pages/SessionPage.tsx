@@ -24,11 +24,11 @@ export function SessionPage() {
   // Don't connect until we have a name, so the user's cursor is labeled.
   const collab = useCollab(name ? (id ?? "") : "", name ?? "");
   const participants = usePresence(collab?.provider ?? null);
-  const exec = useExecution(collab?.provider ?? null);
+  const exec = useExecution(name ? (id ?? "") : null);
 
   if (!name) return <JoinDialog onJoin={setName} />;
 
-  const connected = collab?.status === "connected";
+  const connected = collab?.status === "connected" && exec.ready;
 
   return (
     <div className="session">

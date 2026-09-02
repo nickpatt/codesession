@@ -95,11 +95,7 @@ export class SharedDoc {
     this.controlledIds.set(ws, new Set());
     ws.binaryType = "arraybuffer";
 
-    ws.on("message", (data: ArrayBuffer, isBinary: boolean) => {
-      // Only binary frames are Yjs sync/awareness traffic. Text frames are
-      // application control messages (run/stop) handled elsewhere, so ignore
-      // them here to keep the two channels cleanly separated.
-      if (!isBinary) return;
+    ws.on("message", (data: ArrayBuffer) => {
       this.handleMessage(ws, new Uint8Array(data));
     });
 
@@ -180,17 +176,6 @@ export class SharedDoc {
   /** Current number of open connections. */
   get connectionCount(): number {
     return this.conns.size;
-  }
-
-  /**
-   * Send a JSON control message (as a text frame) to every connection in this
-   * session. Used to fan run status + program output out to all participants.
-   */
-  broadcastControl(message: unknown): void {
-    const text = JSON.stringify(message);
-    for (const conn of this.conns) {
-      if (conn.readyState === WebSocket.OPEN) conn.send(text);
-    }
   }
 
   /** Serialize the document to a binary snapshot for persistence. */

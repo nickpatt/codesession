@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { WebsocketProvider } from "y-websocket";
 import type { ServerControl } from "@codesession/shared";
 
 /** One line/segment of program output in the shared panel. */
@@ -14,96 +13,99 @@ export interface ExecutionState {
   output: OutputLine[];
   /** The last exit summary, if any. */
   lastExit: { exitCode: number; reason?: string } | null;
+  /** True while the control socket is connected. */
+  ready: boolean;
   run: () => void;
   stop: () => void;
   clear: () => void;
 }
 
+/** Build the control WebSocket URL for a session from the page origin. */
+function controlUrl(sessionId: string): string {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}/control/${sessionId}`;
+}
+
 /**
- * Drives the Run/Stop controls and the shared output panel.
+ * Drives the Run/Stop controls and the shared output panel over a dedicated
+ * control WebSocket (separate from the Yjs sync socket).
  *
- * We piggyback on the same WebSocket that y-websocket already manages for the
- * session: control messages travel as JSON *text* frames, while Yjs uses binary
- * frames, so the two never collide. Because the server fans run output to every
- * client, all participants' panels update together.
+ * Because the server fans run output to every control socket in the session,
+ * all participants' panels update together in real time.
  */
-export function useExecution(provider: WebsocketProvider | null): ExecutionState {
+export function useExecution(sessionId: string | null): ExecutionState {
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState<OutputLine[]>([]);
   const [lastExit, setLastExit] = useState<ExecutionState["lastExit"]>(null);
-  // Keep a ref to the socket so run()/stop() can send without re-subscribing.
+  const [ready, setReady] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!provider) return;
+    if (!sessionId) return;
+    let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-    // y-websocket recreates the socket on reconnect; poll the current one.
-    const attach = () => {
-      wsRef.current = provider.ws ?? null;
-    };
-    attach();
-    provider.on("status", attach);
+    const connect = () => {
+      const ws = new WebSocket(controlUrl(sessionId));
+      wsRef.current = ws;
 
-    const onMessage = (ev: MessageEvent) => {
-      // Only handle text frames (our control channel). Binary is Yjs.
-      if (typeof ev.data !== "string") return;
-      let msg: ServerControl;
-      try {
-        msg = JSON.parse(ev.data);
-      } catch {
-        return;
-      }
-      switch (msg.type) {
-        case "run-started":
-          setRunning(true);
-          setLastExit(null);
-          setOutput([{ stream: "system", text: "▶ Running…\n" }]);
-          break;
-        case "run-output":
-          setOutput((prev) => [...prev, { stream: msg.stream, text: msg.data }]);
-          break;
-        case "run-exit":
-          setRunning(false);
-          setLastExit({ exitCode: msg.exitCode, reason: msg.reason });
-          setOutput((prev) => [
-            ...prev,
-            {
-              stream: "system",
-              text: exitLine(msg.exitCode, msg.reason),
-            },
-          ]);
-          break;
-        case "run-error":
-          setRunning(false);
-          setOutput((prev) => [
-            ...prev,
-            { stream: "stderr", text: `\n[error] ${msg.message}\n` },
-          ]);
-          break;
-      }
+      ws.onopen = () => setReady(true);
+      ws.onclose = () => {
+        setReady(false);
+        // Reconnect the control channel so Run keeps working after blips.
+        if (!closed) reconnectTimer = setTimeout(connect, 1000);
+      };
+      ws.onmessage = (ev) => {
+        let msg: ServerControl;
+        try {
+          msg = JSON.parse(ev.data);
+        } catch {
+          return;
+        }
+        applyMessage(msg);
+      };
     };
-
-    // Attach a raw listener to the underlying socket. We re-attach on status
-    // changes because the socket instance can be swapped on reconnect.
-    const bind = () => provider.ws?.addEventListener("message", onMessage);
-    const unbind = () => provider.ws?.removeEventListener("message", onMessage);
-    bind();
-    const rebind = () => {
-      unbind();
-      bind();
-      attach();
-    };
-    provider.on("status", rebind);
+    connect();
 
     return () => {
-      unbind();
-      provider.off("status", attach);
-      provider.off("status", rebind);
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
+      wsRef.current = null;
     };
-  }, [provider]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  function applyMessage(msg: ServerControl) {
+    switch (msg.type) {
+      case "run-started":
+        setRunning(true);
+        setLastExit(null);
+        setOutput([{ stream: "system", text: "▶ Running…\n" }]);
+        break;
+      case "run-output":
+        setOutput((prev) => [...prev, { stream: msg.stream, text: msg.data }]);
+        break;
+      case "run-exit":
+        setRunning(false);
+        setLastExit({ exitCode: msg.exitCode, reason: msg.reason });
+        setOutput((prev) => [
+          ...prev,
+          { stream: "system", text: exitLine(msg.exitCode, msg.reason) },
+        ]);
+        break;
+      case "run-error":
+        setRunning(false);
+        setOutput((prev) => [
+          ...prev,
+          { stream: "stderr", text: `\n[error] ${msg.message}\n` },
+        ]);
+        break;
+    }
+  }
 
   const send = (data: unknown) => {
-    const ws = provider?.ws;
+    const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
   };
 
@@ -111,6 +113,7 @@ export function useExecution(provider: WebsocketProvider | null): ExecutionState
     running,
     output,
     lastExit,
+    ready,
     run: () => send({ type: "run" }),
     stop: () => send({ type: "stop" }),
     clear: () => {
