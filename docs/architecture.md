@@ -63,3 +63,47 @@ the first two; Phase 2 adds the execution service.
 We implement the sync/awareness wire protocol by hand in `collab.ts` (~150
 lines) so the mechanism is visible and explainable rather than a black box.
 It still speaks the exact protocol the standard client expects.
+
+## How code execution works (Phase 2)
+
+Running a program touches all three services:
+
+1. **Browser** — a participant clicks **Run**. The web app sends `{type:"run"}`
+   over a dedicated **control WebSocket** (`/control/<id>`), which is separate
+   from the Yjs sync socket (the Yjs client binary-decodes every frame, so we
+   can't multiplex JSON control messages onto it).
+2. **session-server** — reads the current code straight from the session's Yjs
+   document (so everyone runs exactly what's on screen), POSTs it to the
+   execution-service, and fans the streamed output to **every** control socket
+   in the session. That's why all participants see identical output at once.
+3. **execution-service (Go)** — pulls a pre-started container from the warm
+   pool, writes the code to the container's scratch dir, `docker exec`s
+   `python`, and streams stdout/stderr back as NDJSON. One run per session; a
+   run is cancellable via `/stop`.
+
+### How the sandbox works (the security controls)
+
+Every run happens in a Docker container created with defense-in-depth limits
+(see `internal/sandbox/container.go`). No single control is trusted alone:
+
+| Control | Setting | Stops |
+|---|---|---|
+| No network | `NetworkMode: none` + `NetworkDisabled` | data exfiltration, remote calls |
+| Memory cap | `Memory = 256MB`, `MemorySwap = Memory` (swap off) | memory bombs (OOM-killed) |
+| CPU cap | `NanoCPUs = 0.5 core` | CPU starvation of the host |
+| Process cap | `PidsLimit = 128` | fork bombs |
+| Read-only rootfs | `ReadonlyRootfs: true` | tampering with the image/binaries |
+| Writable scratch only | size-capped `tmpfs` at `/scratch` (32MB) | filling the disk |
+| Drop privileges | `CapDrop: ALL` + `no-new-privileges` | capability abuse, setuid escalation |
+| Non-root user | image runs as uid 10001 `runner` | acting as root inside the container |
+| Wall-clock timeout | 30s (configurable) then force-remove | infinite loops / hangs |
+
+The container is **single-use**: a warm container serves exactly one run and is
+then destroyed, so no state leaks from one user's run to the next.
+
+### Warm pool
+
+Creating and starting a container on the request path costs ~130ms; execing into
+a pre-warmed one costs ~60ms. The pool keeps N containers started and idle,
+hands one out per run, and spawns a replacement in the background. See
+`docs/metrics.md` for the measured before/after numbers.

@@ -5,7 +5,9 @@
 Share a link, code together with live cursors, hit **Run**, and everyone sees the
 output — like a lightweight multiplayer Replit.
 
-> **Status:** Phase 1 (Collaboration) — shippable. Phase 2 (Execution) in progress.
+> **Status:** Phase 1 (Collaboration) and Phase 2 (Execution) — both shippable.
+> Sandboxed Python runs in resource-capped Docker containers; the hostile-snippet
+> suite passes 4/4. Phase 3 (stretch goals) is next.
 
 ---
 
@@ -90,14 +92,40 @@ window, and type in both — they converge.
 
 ## Metrics
 
-Real numbers get filled in as each phase lands (see the spec's measurement plan).
+See [`docs/metrics.md`](docs/metrics.md) for methods and full results.
 
 | Metric | Method | Value |
 |---|---|---|
 | Sync latency (p50/p95) | Timestamp edit leaving one client → arriving at another | _TBD_ |
 | Editors per session sustained | N headless clients typing concurrently | _TBD_ |
-| Warm vs. cold run latency | Run click → first output byte, pool on/off | _Phase 2_ |
-| Sandbox escapes contained | Hostile-snippet test suite | _Phase 2_ |
+| Warm vs. cold run latency (to first output byte) | `cmd/bench`, 15 runs each | cold p50 130ms → **warm p50 59ms** (~55% faster) |
+| Sandbox escapes contained | Hostile-snippet suite | **4 / 4** (loop, mem bomb, network, fork bomb) |
+
+---
+
+## Running code (Phase 2)
+
+The execution-service runs Python in locked-down Docker containers. See
+[`docs/architecture.md`](docs/architecture.md) for the full "how the sandbox
+works" write-up.
+
+```bash
+# 1. build the sandbox runner image
+docker build -t codesession-runner:latest packages/execution-service/sandbox
+
+# 2. start the execution-service (needs Docker running)
+cd packages/execution-service && go run ./cmd/server   # listens on :9090
+
+# 3. start session-server + web as usual (npm run dev)
+```
+
+Prove the sandbox contains hostile code:
+
+```bash
+cd packages/execution-service
+go test ./internal/sandbox -run Hostile -v   # 4/4 contained
+go run ./cmd/bench                           # warm vs cold latency
+```
 
 ---
 
@@ -105,7 +133,8 @@ Real numbers get filled in as each phase lands (see the spec's measurement plan)
 
 - [x] **Phase 1 — Collaboration:** create/join, Yjs sync, cursors, presence,
       reconnect, persistence + 24h expiry.
-- [ ] **Phase 2 — Execution:** Docker sandbox, streamed output, Stop, warm pool.
+- [x] **Phase 2 — Execution:** Docker sandbox (CPU/mem/pids/timeout/no-net/
+      read-only fs), streamed output to all clients, Stop, warm pool.
 - [ ] **Phase 3 — Stretch:** custom CRDT write-up, benchmarks, JS support,
       session replay, per-IP rate limiting.
 

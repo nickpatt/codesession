@@ -2,7 +2,9 @@
 
 Sandboxed execution of untrusted Python, written in Go.
 
-> **Status:** scaffold only. The Run button and sandbox land in Phase 2.
+> **Status:** implemented. Streams output over NDJSON, enforces CPU/mem/pids/
+> timeout/no-network/read-only-fs limits, and keeps a warm container pool.
+> Hostile-snippet suite passes 4/4.
 
 ## Why Go here
 
@@ -32,11 +34,31 @@ Each of these must be contained, and there'll be a test proving it:
 - outbound network call → fails (no network)
 - fork bomb → contained by pids limit
 
-## Layout (planned)
+## Layout
 
 ```
-cmd/server/        entrypoint (HTTP/RPC + streaming)
-internal/sandbox/  container lifecycle + resource limits
-internal/pool/     warm container pool
-internal/run/      per-session run queue + cancellation
+cmd/server/        entrypoint: wires docker → pool → run manager → HTTP
+cmd/bench/         warm-vs-cold latency benchmark
+sandbox/           Dockerfile for the locked-down python runner image
+internal/config/   env-driven config + sandbox limits
+internal/sandbox/  container lifecycle, resource limits, exec + streaming
+internal/pool/     warm container pool (one-use, refills in background)
+internal/run/      per-session single-run manager + cancellation
+internal/httpapi/  POST /run (NDJSON stream), POST /stop, /health
+```
+
+## Endpoints
+
+- `POST /run`  — body `{sessionId, code}`; responds with an
+  `application/x-ndjson` stream of `{type: stdout|stderr|exit|error, ...}`.
+- `POST /stop` — body `{sessionId}`; cancels the active run.
+- `GET  /health`
+
+## Try it
+
+```bash
+docker build -t codesession-runner:latest ./sandbox
+go run ./cmd/server                          # :9090
+go test ./internal/sandbox -run Hostile -v   # containment proof (4/4)
+go run ./cmd/bench                            # latency numbers
 ```
