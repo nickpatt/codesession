@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/nickpatt/codesession/execution-service/internal/run"
+	"github.com/nickpatt/codesession/execution-service/internal/sandbox"
 )
 
 // Server holds the dependencies the HTTP handlers need.
@@ -26,6 +27,7 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("POST /run", s.handleRun)
+	mux.HandleFunc("POST /run-project", s.handleRunProject)
 	mux.HandleFunc("POST /stop", s.handleStop)
 	return mux
 }
@@ -54,8 +56,36 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
+	s.stream(w, req.SessionID, events)
+}
 
-	// Stream: we need the ability to flush after each line so output is live.
+// handleRunProject runs a multi-file project (used by the AI agent to validate
+// its edits) and streams output the same way as handleRun.
+func (s *Server) handleRunProject(w http.ResponseWriter, r *http.Request) {
+	var req run.ProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if req.SessionID == "" || len(req.Files) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sessionId and files required"})
+		return
+	}
+
+	events, err := s.manager.StartProject(req.SessionID, sandbox.Project{
+		Files:   req.Files,
+		Command: req.Command,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	s.stream(w, req.SessionID, events)
+}
+
+// stream writes run.Events to the response as NDJSON, flushing each line so
+// output is live. If the client disconnects mid-run, the run is cancelled.
+func (s *Server) stream(w http.ResponseWriter, sessionID string, events <-chan run.Event) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming unsupported"})
@@ -67,8 +97,7 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	for ev := range events {
 		if err := enc.Encode(ev); err != nil {
-			// Client (session-server) went away; cancel the run to free the box.
-			s.manager.Stop(req.SessionID)
+			s.manager.Stop(sessionID)
 			return
 		}
 		flusher.Flush()

@@ -11,6 +11,11 @@ FROM python:3.12-slim
 # it has no root and no sudo inside the container.
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin runner
 
+# pytest is baked into the image (not installed at runtime) because the sandbox
+# has no network — the agent validates test fixes by running pytest, so it must
+# already be present. Pinned for reproducibility.
+RUN pip install --no-cache-dir pytest==8.3.3
+
 # Python niceties: don't buffer stdout (so output streams immediately) and don't
 # write .pyc files (the rootfs is read-only at runtime anyway).
 ENV PYTHONUNBUFFERED=1 \

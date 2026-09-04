@@ -11,6 +11,17 @@ type Request struct {
 	Code string `json:"code"`
 }
 
+// ProjectRequest is the body of POST /run-project. It runs a whole multi-file
+// project (what the AI agent works with) rather than a single script.
+type ProjectRequest struct {
+	SessionID string `json:"sessionId"`
+	// Files maps a project-relative path to its contents.
+	Files map[string]string `json:"files"`
+	// Command is the argv to run (e.g. ["python","-m","pytest","-q"]). Optional;
+	// defaults to pytest when empty.
+	Command []string `json:"command,omitempty"`
+}
+
 // EventType tags each streamed output event.
 type EventType string
 

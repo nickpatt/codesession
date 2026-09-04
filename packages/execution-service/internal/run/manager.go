@@ -100,6 +100,64 @@ func (m *Manager) Start(sessionID, code string) (<-chan Event, error) {
 	return events, nil
 }
 
+// StartProject runs a multi-file project for a session (used by the AI agent to
+// validate its edits, e.g. by running pytest). Same one-run-per-session and
+// cancellation semantics as Start.
+func (m *Manager) StartProject(sessionID string, proj sandbox.Project) (<-chan Event, error) {
+	m.mu.Lock()
+	if _, busy := m.active[sessionID]; busy {
+		m.mu.Unlock()
+		return nil, ErrBusy{}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.active[sessionID] = cancel
+	m.mu.Unlock()
+
+	events := make(chan Event, 64)
+
+	go func() {
+		defer close(events)
+		defer func() {
+			m.mu.Lock()
+			delete(m.active, sessionID)
+			m.mu.Unlock()
+			cancel()
+		}()
+
+		acqCtx, acqCancel := context.WithTimeout(ctx, 15*time.Second)
+		id, err := m.pool.Acquire(acqCtx)
+		acqCancel()
+		if err != nil {
+			events <- Event{Type: EventError, Data: "could not acquire sandbox: " + err.Error()}
+			return
+		}
+		defer m.docker.Remove(context.Background(), id)
+
+		chunks := make(chan sandbox.OutputChunk, 64)
+		done := make(chan sandbox.Result, 1)
+		go func() {
+			res, runErr := m.docker.RunProject(ctx, id, proj, m.timeout, chunks)
+			close(chunks)
+			if runErr != nil {
+				events <- Event{Type: EventError, Data: runErr.Error()}
+			}
+			done <- res
+		}()
+
+		for c := range chunks {
+			t := EventStdout
+			if c.Stderr {
+				t = EventStderr
+			}
+			events <- Event{Type: t, Data: string(c.Data)}
+		}
+		res := <-done
+		events <- Event{Type: EventExit, ExitCode: res.ExitCode, Reason: res.Reason}
+	}()
+
+	return events, nil
+}
+
 // Stop cancels the active run for a session, if any. Returns true if a run was
 // actually cancelled.
 func (m *Manager) Stop(sessionID string) bool {
