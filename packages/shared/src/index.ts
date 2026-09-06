@@ -37,24 +37,101 @@ export interface CreateSessionResponse {
 }
 
 /**
- * Control messages sent from a client to the server over the WebSocket as JSON
- * text frames (binary frames are reserved for Yjs sync/awareness). Phase 2 adds
- * run + stop.
+ * Control messages sent from a client to the server over the control WebSocket
+ * as JSON text frames. Phase 2 added run + stop; Phase 3 adds the AI agent.
  */
 export type ClientControl =
   | { type: "run" }
-  | { type: "stop" };
+  | { type: "stop" }
+  | { type: "agent_task"; prompt: string }
+  | { type: "agent_cancel" };
 
 /**
  * Messages the server broadcasts to every client in a session as JSON text
- * frames, carrying shared run state and streamed program output. Because these
- * are fanned out to everyone, all participants see the same output at once.
+ * frames. Fanned out to everyone, so all participants see the same run output
+ * and the same agent activity at once.
  */
 export type ServerControl =
   | { type: "run-started"; by?: string }
   | { type: "run-output"; stream: "stdout" | "stderr"; data: string }
   | { type: "run-exit"; exitCode: number; reason?: string }
-  | { type: "run-error"; message: string };
+  | { type: "run-error"; message: string }
+  | AgentEvent;
+
+// ---------------------------------------------------------------------------
+// AI coding agent (Phase 3)
+// ---------------------------------------------------------------------------
+
+/** Lifecycle status of an agent task. */
+export type AgentStatus =
+  | "queued"
+  | "retrieving_context"
+  | "generating"
+  | "applying_patch"
+  | "executing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+/**
+ * Structured actions the model must emit (it never touches the filesystem
+ * directly). Keeping actions structured makes them easy to validate, apply as
+ * Yjs edits, audit, and show in the UI.
+ */
+export type AgentAction =
+  | { action: "read_file"; path: string }
+  | { action: "edit_file"; path: string; changes: EditChange[] }
+  | { action: "create_file"; path: string; content: string }
+  | { action: "run_command"; command?: string[] }
+  | { action: "finish"; summary: string };
+
+/**
+ * A single edit within a file: replace the inclusive line range
+ * [startLine, endLine] (1-indexed) with `replacement`. Line-range edits map
+ * cleanly onto Yjs text operations.
+ */
+export interface EditChange {
+  startLine: number;
+  endLine: number;
+  replacement: string;
+}
+
+/**
+ * Events the agent emits during a task, streamed to every collaborator so the
+ * agent's activity is visible in real time (spec section 13).
+ */
+export type AgentEvent =
+  | { type: "agent.started"; taskId: string; prompt: string }
+  | { type: "agent.status"; taskId: string; status: AgentStatus }
+  | { type: "agent.context"; taskId: string; files: string[] }
+  | { type: "agent.thinking"; taskId: string; iteration: number }
+  | { type: "agent.action"; taskId: string; action: AgentAction }
+  | { type: "agent.patch_applied"; taskId: string; path: string }
+  | {
+      type: "agent.execution_output";
+      taskId: string;
+      stream: "stdout" | "stderr";
+      data: string;
+    }
+  | {
+      type: "agent.iteration_finished";
+      taskId: string;
+      iteration: number;
+      exitCode: number;
+    }
+  | {
+      type: "agent.completed";
+      taskId: string;
+      iterations: number;
+      summary: string;
+    }
+  | { type: "agent.failed"; taskId: string; reason: string };
+
+/** The identity the agent presents as a collaborator in a session. */
+export const AGENT_IDENTITY = {
+  name: "CodeSession Agent",
+  color: "#a855f7",
+} as const;
 
 /** Distinct, high-contrast colors assigned round-robin to participants. */
 export const USER_COLORS = [
