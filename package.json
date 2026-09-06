@@ -6,12 +6,14 @@
   "workspaces": [
     "packages/shared",
     "packages/session-server",
+    "packages/agent-server",
     "packages/web"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @codesession/session-server & npm run dev --workspace @codesession/web",
     "dev:server": "npm run dev --workspace @codesession/session-server",
     "dev:web": "npm run dev --workspace @codesession/web",
+    "dev:agent": "npm run dev --workspace @codesession/agent-server",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
