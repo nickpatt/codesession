@@ -133,6 +133,8 @@ export const AGENT_IDENTITY = {
   color: "#a855f7",
 } as const;
 
+export * from "./project.js";
+
 /** Distinct, high-contrast colors assigned round-robin to participants. */
 export const USER_COLORS = [
   "#e11d48",
