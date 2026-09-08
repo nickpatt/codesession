@@ -24,4 +24,7 @@ export const config = {
 
   /** Base URL of the execution-service that runs code (Phase 2). */
   execUrl: process.env.EXEC_URL ?? "http://localhost:9090",
+
+  /** Base URL of the agent-server that runs the AI coding agent (Phase 3). */
+  agentUrl: process.env.AGENT_URL ?? "http://localhost:7070",
 } as const;

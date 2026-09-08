@@ -8,6 +8,7 @@ import { createRoutes } from "./routes.js";
 import { DocManager } from "./collab.js";
 import { Persistence } from "./persistence.js";
 import { ExecutionBridge } from "./execution.js";
+import { AgentBridge } from "./agent.js";
 import { ControlHub } from "./control.js";
 import type { ClientControl } from "@codesession/shared";
 
@@ -43,6 +44,9 @@ const control = new ControlHub();
 
 /** Bridges Run/Stop to the execution-service and fans output to all clients. */
 const execution = new ExecutionBridge(docs);
+
+/** Bridges agent tasks to the agent-server and fans agent events to clients. */
+const agent = new AgentBridge();
 
 /** Liveness probe used by load balancers and the local dev setup. */
 app.get("/health", (_req, res) => {
@@ -109,6 +113,10 @@ server.on("upgrade", (req, socket, head) => {
         void execution.run(sessionId, broadcast);
       } else if (msg.type === "stop") {
         void execution.stop(sessionId);
+      } else if (msg.type === "agent_task") {
+        void agent.start(sessionId, msg.prompt, broadcast);
+      } else if (msg.type === "agent_cancel") {
+        void agent.cancel(sessionId);
       }
     });
 
