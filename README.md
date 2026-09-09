@@ -5,9 +5,9 @@
 Share a link, code together with live cursors, hit **Run**, and everyone sees the
 output — like a lightweight multiplayer Replit.
 
-> **Status:** Phase 1 (Collaboration) and Phase 2 (Execution) — both shippable.
-> Sandboxed Python runs in resource-capped Docker containers; the hostile-snippet
-> suite passes 4/4. Phase 3 (stretch goals) is next.
+> **Status:** Phases 1–3 shippable. Real-time collaboration + sandboxed Python
+> execution + an **AI coding agent** that edits the shared project as a
+> collaborator, runs the tests in the sandbox, and iterates until they pass.
 
 ---
 
@@ -135,8 +135,28 @@ go run ./cmd/bench                           # warm vs cold latency
       reconnect, persistence + 24h expiry.
 - [x] **Phase 2 — Execution:** Docker sandbox (CPU/mem/pids/timeout/no-net/
       read-only fs), streamed output to all clients, Stop, warm pool.
-- [ ] **Phase 3 — Stretch:** custom CRDT write-up, benchmarks, JS support,
-      session replay, per-IP rate limiting.
+- [x] **Phase 3 — AI coding agent:** multi-file projects; an agent that joins
+      the Yjs doc as a collaborator, retrieves context, makes structured edits
+      (stale-checked), runs pytest in the sandbox, and iterates within budgets.
+      Pluggable LLM (Anthropic + deterministic mock).
+- [ ] **Later:** custom CRDT write-up, agent benchmark/eval harness, JS support,
+      per-IP rate limiting.
+
+## AI agent (Phase 3)
+
+The agent-server runs the agent loop. It defaults to a deterministic **mock**
+provider so the whole flow works with no API key; set `LLM_PROVIDER=anthropic`
+and `ANTHROPIC_API_KEY=...` to use a real model.
+
+```bash
+# with session-server + execution-service already running:
+LLM_PROVIDER=mock npm run dev:agent      # agent-server on :7070
+```
+
+In a session, open the **AI Agent** panel, enter a task (a starter project ships
+with a deliberately failing test), and click *Run Agent*. Watch it read context,
+edit `src/calc.py` through the shared document, run the tests, and finish. See
+[`docs/architecture.md`](docs/architecture.md) for the full design.
 
 ## License
 

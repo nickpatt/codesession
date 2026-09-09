@@ -107,3 +107,53 @@ Creating and starting a container on the request path costs ~130ms; execing into
 a pre-warmed one costs ~60ms. The pool keeps N containers started and idle,
 hands one out per run, and spawns a replacement in the background. See
 `docs/metrics.md` for the measured before/after numbers.
+
+## The AI coding agent (Phase 3)
+
+A fourth service, the **agent-server** (Node + TS), runs an AI coding agent that
+participates in a session as a first-class collaborator.
+
+### The project model
+
+To support multi-file projects, a session's document holds a Yjs `Y.Map` named
+`files` mapping `path -> Y.Text`. Each file is its own collaborative text, so
+humans and the agent edit files through the same CRDT and converge — no one
+silently overwrites anyone else. The editor binds to one file at a time (file
+tabs switch between them). `packages/shared/src/project.ts` is the single source
+of truth for this shape, used by the web client, session-server, and agent-server.
+
+### The agent loop
+
+```
+user prompt (agent_task over control WS)
+   → session-server → agent-server
+        connect to the session's Yjs doc as a collaborator
+        ┌─────────────────────────────────────────────┐
+        │ retrieve context (relevance-ranked files)   │
+        │   → LLM → ONE structured action (JSON)      │
+        │   → apply edit via Yjs txn (stale-checked)  │
+        │   → run project tests in the Go sandbox     │
+        │   → tests pass? finish : feed errors back   │
+        └──────────────── retry (budgeted) ───────────┘
+   ← agent.* events streamed back → fanned to all clients
+```
+
+Key properties:
+
+- **Collaborative edits.** The agent joins the doc via `y-websocket` with its
+  own client id and shows up in the presence list as *CodeSession Agent*. Its
+  edits flow through the normal sync pipeline, so humans see them live.
+- **Structured actions.** The model never touches files directly — it emits one
+  JSON action (`edit_file`, `create_file`, `run_command`, `finish`) which we
+  validate, apply, audit, and render in the UI.
+- **Stale-context guard.** Before applying a patch, the agent compares the
+  file's version to what it saw when building context. If a human changed that
+  file meanwhile, the patch is rejected and the agent re-reads and regenerates —
+  it never clobbers newer human work.
+- **Untrusted like any code.** The agent's edits are executed through the exact
+  same locked-down Go/Docker sandbox as human Run requests.
+- **Budgets.** Iterations, executions, wall-clock, and tokens are all capped so
+  the agent can't loop or spend without bound.
+- **Pluggable LLM.** An `LLMProvider` interface with an Anthropic implementation
+  and a deterministic `mock` provider, so the whole loop runs (and is tested)
+  with no API key or cost.
