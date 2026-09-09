@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
 import type { ServerControl } from "@codesession/shared";
+import { snapshotProject } from "@codesession/shared";
 import type { DocManager } from "./collab.js";
 import { config } from "./config.js";
 
@@ -42,17 +43,22 @@ export class ExecutionBridge {
       broadcast({ type: "run-error", message: "session document not found" });
       return;
     }
-    const code = doc.doc.getText("code").toString();
+    // Snapshot the whole multi-file project and run its tests in the sandbox.
+    const files = snapshotProject(doc.doc);
+    if (Object.keys(files).length === 0) {
+      broadcast({ type: "run-error", message: "project is empty" });
+      return;
+    }
 
     const controller = new AbortController();
     this.active.set(sessionId, controller);
     broadcast({ type: "run-started" });
 
     try {
-      const res = await fetch(`${config.execUrl}/run`, {
+      const res = await fetch(`${config.execUrl}/run-project`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId, code }),
+        body: JSON.stringify({ sessionId, files }),
         signal: controller.signal,
       });
 

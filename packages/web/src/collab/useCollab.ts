@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
-import { colorForClient } from "@codesession/shared";
+import { colorForClient, getFiles } from "@codesession/shared";
 
 /** Connection status surfaced to the UI. */
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
 /**
  * Everything a component needs to render a collaborative session: the shared
- * text, the awareness provider (cursors/presence), and the live status.
+ * document (a multi-file project), the awareness provider (cursors/presence),
+ * and the live status. The editor binds to one file within the project's file
+ * map at a time.
  */
 export interface Collab {
   doc: Y.Doc;
   provider: WebsocketProvider;
-  /** The shared code buffer. CodeMirror binds directly to this Y.Text. */
-  text: Y.Text;
   status: ConnStatus;
 }
 
@@ -40,7 +40,6 @@ export function useCollab(sessionId: string, name: string): Collab | null {
 
   useEffect(() => {
     const doc = new Y.Doc();
-    const text = doc.getText("code");
 
     // The provider connects to  /ws/<sessionId>  (Vite proxies this in dev).
     // Passing the room name separately keeps the URL matching our server route.
@@ -60,14 +59,17 @@ export function useCollab(sessionId: string, name: string): Collab | null {
     // event guarantees our cursor reappears for everyone after a reconnect,
     // and that buffered document edits made while offline are flushed.
     const onSync = (isSynced: boolean) => {
-      if (isSynced) provider.awareness.setLocalStateField("user", userField);
+      if (!isSynced) return;
+      provider.awareness.setLocalStateField("user", userField);
+      // Seed a starter project the first time a brand-new session syncs, so the
+      // editor (and the agent) always have at least one file to work with.
+      seedDefaultProject(doc);
     };
     provider.on("sync", onSync);
 
     const collabValue: Collab = {
       doc,
       provider,
-      text,
       status: "connecting",
     };
     setCollab(collabValue);
@@ -92,4 +94,24 @@ export function useCollab(sessionId: string, name: string): Collab | null {
   }, [sessionId, name]);
 
   return collab;
+}
+
+/** Starter project: a tiny calculator plus a matching (failing) test, so the
+ * demo of "ask the agent to fix the failing test" works out of the box. Only
+ * applied if the project is still empty (first client into a new session). */
+function seedDefaultProject(doc: Y.Doc): void {
+  const files = getFiles(doc);
+  if (files.size > 0) return;
+  doc.transact(() => {
+    const calc = new Y.Text();
+    calc.insert(0, "def add(a, b):\n    return a - b\n");
+    files.set("src/calc.py", calc);
+
+    const test = new Y.Text();
+    test.insert(
+      0,
+      "import sys\nsys.path.insert(0, 'src')\nfrom calc import add\n\n\ndef test_add():\n    assert add(2, 3) == 5\n",
+    );
+    files.set("tests/test_calc.py", test);
+  });
 }

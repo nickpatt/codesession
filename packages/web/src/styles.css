@@ -78,10 +78,90 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .presence .dot { width: 10px; height: 10px; border-radius: 50%; }
 
-/* Editor + output split the remaining height. */
+/* Main area splits horizontally: workspace (editor+output) | agent panel. */
+.main { flex: 1; min-height: 0; display: flex; }
 .workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .editor-wrap { flex: 3; min-height: 0; }
 .cm-editor { height: 100%; }
+
+/* File tabs */
+.file-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.file-tab {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.file-tab.active { color: var(--text); background: var(--bg); border-bottom: 2px solid var(--accent); }
+
+/* Agent panel */
+.agent-panel {
+  width: 340px;
+  min-width: 300px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.agent-header {
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
+.agent-input { padding: 0.7rem; border-bottom: 1px solid var(--border); }
+.agent-input textarea {
+  width: 100%;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font: inherit;
+  margin-bottom: 0.5rem;
+}
+.agent-input button { width: 100%; }
+.agent-steps { flex: 1; overflow: auto; padding: 0.6rem 0.8rem; font-size: 0.85rem; }
+.agent-empty { color: var(--muted); font-style: italic; }
+.agent-step { padding: 0.2rem 0; display: flex; gap: 0.4rem; align-items: baseline; }
+.agent-step .bullet { font-size: 0.6rem; }
+.step-status .bullet { color: var(--muted); }
+.step-context .bullet { color: #0891b2; }
+.step-action .bullet { color: #d97706; }
+.step-patch .bullet { color: #9333ea; }
+.step-iteration .bullet { color: #2563eb; }
+.step-done .bullet, .step-done { color: #16a34a; }
+.step-error .bullet, .step-error { color: #e11d48; }
+.agent-output {
+  border-top: 1px solid var(--border);
+  padding: 0.4rem 0.8rem;
+  max-height: 180px;
+  overflow: auto;
+}
+.agent-output summary { cursor: pointer; color: var(--muted); font-size: 0.8rem; }
+.agent-output pre {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  margin: 0.4rem 0 0;
+}
+.agent-result {
+  padding: 0.6rem 0.9rem;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+.agent-result.ok { color: #16a34a; }
+.agent-result.fail { color: #e11d48; }
 
 /* Run / Stop buttons */
 button.run { background: #16a34a; }
