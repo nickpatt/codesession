@@ -1,34 +1,52 @@
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { getOrCreateFile, DEFAULT_FILE } from "@codesession/shared";
 import { useCollab } from "../collab/useCollab.js";
+import { useProjectFiles } from "../collab/useProjectFiles.js";
 import { Editor } from "../collab/Editor.js";
 import { JoinDialog } from "../components/JoinDialog.js";
 import { ShareLink } from "../components/ShareLink.js";
 import { PresenceList } from "../components/PresenceList.js";
 import { ConnectionStatus } from "../components/ConnectionStatus.js";
 import { OutputPanel } from "../components/OutputPanel.js";
+import { FileTabs } from "../components/FileTabs.js";
+import { AgentPanel } from "../components/AgentPanel.js";
 import { usePresence } from "../collab/usePresence.js";
 import { useExecution } from "../exec/useExecution.js";
+import { useAgent } from "../agent/useAgent.js";
 import { useDisplayName } from "../hooks/useDisplayName.js";
 
 /**
- * The collaborative editor page.
- *
- * Flow: if we don't yet know the user's display name, show the join dialog.
- * Once we have a name, connect to the session's Yjs document and render the
- * editor bound to it, plus the Run/Stop controls and shared output panel.
+ * The collaborative editor page: a multi-file project editor with live
+ * collaboration, a Run button (runs the project's tests in the sandbox), a
+ * shared output panel, and the AI Agent panel.
  */
 export function SessionPage() {
   const { id } = useParams();
   const [name, setName] = useDisplayName();
 
-  // Don't connect until we have a name, so the user's cursor is labeled.
   const collab = useCollab(name ? (id ?? "") : "", name ?? "");
   const participants = usePresence(collab?.provider ?? null);
   const exec = useExecution(name ? (id ?? "") : null);
+  const agent = useAgent(name ? (id ?? "") : null);
+  const files = useProjectFiles(collab?.doc ?? null);
+
+  // Which file the editor is showing. Default to the conventional entry file.
+  const [activePath, setActivePath] = useState<string | null>(null);
+  useEffect(() => {
+    if (activePath && files.includes(activePath)) return;
+    setActivePath(files[0] ?? null);
+  }, [files, activePath]);
 
   if (!name) return <JoinDialog onJoin={setName} />;
 
   const connected = collab?.status === "connected" && exec.ready;
+  const activeFile =
+    collab && activePath
+      ? getOrCreateFile(collab.doc, activePath)
+      : collab
+        ? getOrCreateFile(collab.doc, DEFAULT_FILE)
+        : null;
 
   return (
     <div className="session">
@@ -49,9 +67,17 @@ export function SessionPage() {
         <PresenceList participants={participants} />
       </div>
 
-      <div className="workspace">
-        {collab ? <Editor collab={collab} /> : <div className="editor-wrap" />}
-        <OutputPanel output={exec.output} />
+      <div className="main">
+        <div className="workspace">
+          <FileTabs files={files} active={activePath} onSelect={setActivePath} />
+          {collab && activeFile ? (
+            <Editor file={activeFile} provider={collab.provider} />
+          ) : (
+            <div className="editor-wrap" />
+          )}
+          <OutputPanel output={exec.output} />
+        </div>
+        <AgentPanel agent={agent} disabled={!connected} />
       </div>
     </div>
   );
